@@ -1,2 +1,5 @@
-*.csv
-*deskstop.ini
+data/
+results/
+__pycache__/
+*.pyc
+.vscode/
