@@ -1,98 +1,143 @@
-# Stock Sensitivity to Pure Volatility Shocks
+# Pure Volatility Shocks and Individual Stock Returns
 
-Per-stock estimates of how nine large-cap equities respond to changes in VIX that are unrelated to the S&P 500's own move.
+How do individual stocks react, on the same day, to a jump in market volatility that the market's own move does not explain?
 
-## Question
+This project takes the market-driven part out of daily VIX moves (by orthogonalizing them against the S&P 500 return) and measures how nine large-cap U.S. stocks respond to what is left: a **pure volatility shock**. It uses 20 years of daily data (Oct 2006 to Sep 2026, 5,021 trading days), Newey-West standard errors, rolling one-year regressions, outlier checks, and Wald tests of stability across subperiods.
 
-Do individual stocks have a stable exposure to volatility surprises once the market return is controlled for? The starting hypothesis was that these betas are negative (stocks fall when volatility rises beyond what the market move explains).
+## Key findings
+
+- **The shock moves money between stocks; it is not a broad selloff.** Once the market is controlled for, growth and defensive stocks move in opposite directions.
+- **NVDA falls on pure volatility shocks** (about -15 bps per 1-SD shock, t = -4.1), and has done so consistently since 2006.
+- **KO started rising on these shocks after 2020** (Wald p of 0.003 or less in every outlier version). JNJ shows the same shift, but it misses the multiple-testing cutoff.
+- **JPM rises on these shocks** (+12 bps, t = 2.75), but almost all of the effect comes from 2006 to 2012.
+- **How the shock is measured decides the result.** In VIX points the effect looks like nothing, because a few crisis days dominate. Measured as log (percent) changes, the pattern appears.
+
+## Question and scope
+
+On any day a stock is moved by two related forces: the overall market (SPX) and market volatility (VIX). They are tangled, because when the market falls the VIX almost always jumps. The project asks what a volatility move does to a stock **once the market's move is held fixed**, whether that response differs across stocks, and whether it is stable over time.
+
+This is an **exposure** study, not a pricing study: it does not test whether volatility-sensitive stocks earn different average returns, which is the question in Ang, Hodrick, Xing and Zhang (2006). It is also not a forecasting study, since every effect is measured on the same day as the shock.
 
 ## Data
 
-- Daily SPX, VIX, and equity prices for nine stocks (NVDA, GOOGL, AAPL, MSFT, WMT, XOM, KO, JNJ, JPM), 2006 to 2026
-- Pulled from Interactive Brokers via `ib_async`
-- The basket was hand-picked, so this is a nine-stock study and not a cross-sectional pricing test
+| Series | Description | Used as |
+| --- | --- | --- |
+| SPX | S&P 500 cash index | daily log return (market factor) |
+| VIX | CBOE volatility index | daily point change and log change |
+| AAPL, MSFT, NVDA, GOOGL | tech / growth | daily log returns |
+| JPM | bank | daily log return |
+| XOM | energy | daily log return |
+| WMT, KO, JNJ | retail / staples (defensives) | daily log returns |
+
+Daily bars come from Interactive Brokers via `pull_data.py`. The stocks were picked by hand to span a range of expected volatility sensitivities, so the results describe these names, not stocks in general.
 
 ## Method
 
-**1. Isolate the volatility shock.** Regress the VIX change on the SPX return and keep the residual:
+**1. Returns and volatility moves.** Prices become log returns, and the VIX move is built two ways:
 
-$$\Delta \ln \text{VIX}_t = a + b \, r^{SPX}_t + \varepsilon_t$$
+$$
+r_t = \ln\frac{P_t}{P_{t-1}}, \qquad
+\Delta \mathrm{VIX}_t = \mathrm{VIX}_t - \mathrm{VIX}_{t-1}, \qquad
+\Delta \ln \mathrm{VIX}_t = \ln\frac{\mathrm{VIX}_t}{\mathrm{VIX}_{t-1}}
+$$
 
-The residual $\varepsilon_t$ is the "pure" volatility shock. Checks on the orthogonalization:
+The point change is dominated by the few days when VIX was already high. The log change (roughly a percent change) treats a move from 10 to 12 like one from 50 to 60, and it is the main specification.
 
-| Check | Result |
-|---|---|
-| $\text{corr}(\varepsilon_t, r^{SPX}_t)$ | $\approx 6 \times 10^{-16}$ |
-| Slope $b$ | $-4.64$ |
-| $R^2$ | $0.547$ |
-| Frisch-Waugh-Lovell (JPM) | raw and orthogonalized coefficients both $0.00064250$ |
+**2. Orthogonalization.** Regress the VIX move on the market return and keep the residual $v_t$, the pure volatility shock:
 
-The FWL match is expected, since orthogonalizing is equivalent to controlling for $r^{SPX}_t$ directly. It confirms the pipeline is wired correctly.
+$$
+\Delta \mathrm{VIX}_t = \gamma_0 + \gamma_1 r^m_t + u_t, \qquad v_t = \hat u_t
+$$
 
-**2. Per-stock regressions.** For each stock $i$:
+By construction $\operatorname{corr}(v_t, r^m_t) = 0$. The slope measures the leverage effect: a 1% SPX drop comes with about +1.3 VIX points, or about +4.6% in VIX ($R^2$ of 0.67 and 0.55).
 
-$$r_{i,t} = \alpha_i + \beta_i \, r^{SPX}_t + \gamma_i \, \varepsilon_t + u_{i,t}$$
+**3. Stock exposures.** For each stock, with Newey-West (HAC, 5 lags) standard errors:
 
-The object of interest is $\gamma_i$, reported as the effect of a 1-standard-deviation shock in basis points. Standard errors are HAC.
+$$
+r^i_t = \alpha_i + \beta_i r^m_t + \delta_i v_t + \varepsilon^i_t
+$$
 
-**3. Two shock definitions.** The shock is built from either the level change $\Delta \text{VIX}_t$ or the log change $\Delta \ln \text{VIX}_t$. The log version is the primary specification: level changes are dominated by 2008 and 2020, when VIX itself was very large, so the level regression is close to a crisis-only regression.
+$\beta_i$ is the market beta and $\delta_i$ the volatility beta: the response to a pure shock with the market held fixed. By the Frisch-Waugh-Lovell theorem, $\delta_i$ comes out identical whether the raw or orthogonalized VIX move is used. What orthogonalizing changes is $\beta_i$, which becomes the plain market beta, and it gives $v_t$ a clean meaning. Effects are reported per one-standard-deviation shock, in basis points:
+
+$$
+\text{effect}_i = \hat\delta_i \, \sigma_v \times 10^4
+$$
+
+**4. Stability over time.** Rolling 252-day regressions, plus one regression in which every coefficient gets its own value in P1 (2006 to 2012), P2 (2013 to 2019) and P3 (2020 to 2026):
+
+$$
+r^i_t = \sum_{p=1}^{3} D_{p,t}\left(a_p + b_p r^m_t + d_p v_t\right) + \varepsilon_t
+$$
+
+A Wald test of $d_1 = d_2 = d_3$ (HAC covariance, $\chi^2_2$) checks whether the volatility beta changed. With nine stocks tested, the Bonferroni cutoff is $0.05/9 \approx 0.0056$.
+
+**5. Outlier checks.** Everything is rerun four ways: as-is; with the shock capped at its 1st and 99th percentiles; without the 10 biggest shock days; and without the 1% of days with the biggest market moves.
 
 ## Results
 
-### Full sample: effect of a 1-SD volatility shock (bps)
+| Finding | Effect (bps per 1-SD shock) | Robust to outliers? | Stable over time? | Verdict |
+| --- | --- | --- | --- | --- |
+| NVDA falls on shocks | -15.1 (t = -4.1) | yes, \|t\| from 2.6 to 4.1 | yes, Wald p from 0.10 to 0.59 | **robust and stable** |
+| KO gains on shocks after 2020 | P3: +13.9 (t = 3.3) | yes | no, Wald p ≤ 0.003 in all versions | **robust change over time** |
+| JPM gains on shocks | +11.9 (t = 2.75) | yes, t from 2.8 to 3.4 | concentrated in 2006 to 2012 | **real, but early period only** |
+| JNJ gains on shocks after 2020 | P3: +15.8 (t = 3.4) | mostly | Wald p from 0.009 to 0.047 | suggestive |
+| GOOGL falls on shocks | -5.0 (t = -2.3) | sign yes, significance no | no evidence of change | weak |
+| AAPL, MSFT, WMT, XOM | small, mixed signs | | | no effect |
 
-| Stock | Level shock (bps) | $t$ | Log shock (bps) | $t$ |
-|---|---:|---:|---:|---:|
-| NVDA | -6.29 | -1.37 | -15.07 | -4.10 |
-| GOOGL | 3.40 | 1.11 | -4.98 | -2.33 |
-| AAPL | 3.68 | 0.98 | -2.15 | -0.99 |
-| MSFT | 0.93 | 0.38 | -0.77 | -0.38 |
-| WMT | -2.72 | -1.05 | 1.55 | 0.66 |
-| XOM | -4.06 | -1.29 | 3.29 | 1.12 |
-| KO | -1.85 | -0.63 | 3.39 | 1.48 |
-| JNJ | 1.06 | 0.37 | 4.37 | 1.83 |
-| JPM | 7.19 | 1.63 | 11.88 | 2.75 |
+Measured in VIX points instead, no stock has a significant response, and 5 of 9 stocks flip sign compared with the log-change version.
 
-- Under the level shock, nothing is significant at the 5% level.
-- Under the log shock, three names are: NVDA (negative), GOOGL (negative), JPM (positive).
-- Five names change sign between specifications (GOOGL, AAPL, MSFT, WMT, XOM). None of those sign changes is statistically significant on either side.
-- With nine tests, a Bonferroni cutoff is $p < 0.0056$ ($|t| \gtrsim 2.77$). NVDA clears it comfortably, JPM just misses it, and GOOGL does not clear it.
+**Leverage effect and the pure shock series**
 
-### Subperiod stability (log shock, bps and $t$-stats)
+![Orthogonalization](results/orthogonalization.png)
 
-| Stock | 2006-12 | $t$ | 2013-19 | $t$ | 2020-26 | $t$ | Wald $p$ |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| KO | -3.15 | -0.82 | -3.79 | -1.63 | 13.95 | 3.34 | 0.001 |
-| JNJ | 4.58 | 1.28 | 2.45 | 0.82 | 15.81 | 3.45 | 0.047 |
-| AAPL | -8.00 | -1.41 | 4.75 | 1.34 | 1.78 | 0.46 | 0.160 |
-| JPM | 17.40 | 1.49 | -1.38 | -0.53 | 4.58 | 1.04 | 0.178 |
-| NVDA | -20.99 | -2.65 | -7.25 | -1.10 | -17.91 | -2.53 | 0.348 |
-| MSFT | 0.46 | 0.11 | 7.14 | 2.28 | 3.90 | 1.02 | 0.433 |
-| XOM | 0.01 | 0.00 | 0.28 | 0.11 | 7.85 | 1.36 | 0.473 |
-| GOOGL | 2.62 | 0.53 | -2.29 | -0.88 | -3.29 | -0.69 | 0.628 |
-| WMT | 0.48 | 0.11 | 2.96 | 1.05 | 5.16 | 1.23 | 0.751 |
+**Rolling one-year response to a pure volatility shock (log change)**
 
-The Wald $p$-value tests whether the volatility beta is equal across the three subperiods.
+![Rolling betas, log shock](results/rolling_betas_dlnvix_orth.png)
 
-## Findings
+**The same, measured in VIX points**
 
-1. **NVDA is the one robust negative exposure.** Negative in all three subperiods and highly significant in the full sample under the log shock.
-2. **KO and JNJ turn positive after 2020.** Both are flat or negative before 2020 and strongly positive in 2020-26. KO's stability test survives the Bonferroni cutoff ($p = 0.001$). JNJ ($p = 0.047$) does not, so it is suggestive only. This looks like a regime effect and not a stable exposure.
-3. **JPM's full-sample positive beta is fragile.** The subperiod signs move around and none is individually significant.
-4. **The rest are indistinguishable from zero** once the market return is controlled for, and they are stable across subperiods.
-5. **The original hypothesis of broadly negative vol betas is not supported.** Results depend meaningfully on how the shock is defined.
+![Rolling betas, point shock](results/rolling_betas_dvix_orth.png)
+
+## Project structure
+
+```
+pull_data.py      pulls 20 years of daily bars from Interactive Brokers into data/
+main.py           runs the full analysis on data/ and writes results/
+data/             raw CSVs (one per symbol) + panel.csv
+results/          tables (.csv) and charts (.png)
+archive/          earlier one-step-at-a-time scripts
+```
+
+## How to run
+
+```
+pip install -r requirements.txt
+python pull_data.py     # only if data/ is empty; needs TWS or IB Gateway running on port 7497
+python main.py          # runs every stage, about a minute
+```
+
+`pull_data.py` needs an IBKR account with market data permissions for the SPX and VIX indices. `main.py` runs six stages in order: build the panel, diagnostics, orthogonalize the volatility shocks, full-sample betas, rolling betas, and the robustness and stability tests. It prints each stage and writes:
+
+| Output | Contents |
+| --- | --- |
+| `results/full_sample_betas.csv` | alpha, market beta, R², and point vs log shock effects per stock |
+| `results/rolling_betas_*.csv` / `.png` | rolling one-year effects for each shock definition |
+| `results/robust_full_sample.csv` | full-sample effects under the four outlier versions |
+| `results/robust_subperiods.csv` | P1 / P2 / P3 effects and Wald p-values under each version |
+| `results/orthogonalization.png` | leverage-effect scatter and the pure shock series |
 
 ## Limitations
 
-- Nine hand-picked stocks, so no cross-sectional inference (no Fama-MacBeth or portfolio sorts) and limited ability to generalize.
-- HAC lag-length sensitivity has not yet been checked.
-- Subperiod splits are chosen by calendar and not by estimated breaks, and each subperiod has fewer observations than the full sample.
-- Findings 2 and 3 involve many comparisons (9 stocks, 3 subperiods, 2 shock definitions), so only the results that survive multiple-testing adjustment should be read as more than suggestive.
+- **Small, hand-picked basket.** "Growth falls on shocks" rests mostly on NVDA.
+- **Same day only.** Nothing here says whether shocks predict future returns.
+- **Calendar subperiods.** The P1 / P2 / P3 boundaries were chosen by calendar year, not estimated from the data.
+- **Asymmetry untested.** The 10 largest shocks were all VIX spikes; up and down shocks may act differently.
+- **Full-sample orthogonalization.** Within a single window $v_t$ is not exactly uncorrelated with the market. This does not bias $\delta_i$, since the market is in every regression.
+- **Data check.** GOOGL's close on 2008-09-30 looks like a bad print and should be verified against a second source.
 
-## Code
+## References
 
-- `build_panel.py`: builds the SPX/VIX/equity panel
-- `orthogonalize.py`: orthogonalizes the VIX change against SPX returns
-- `per_stock_betas.py`: per-stock regressions with HAC standard errors
-
-Stack: pandas, NumPy, statsmodels, matplotlib.
+- Ang, A., Hodrick, R. J., Xing, Y., and Zhang, X. (2006). The Cross-Section of Volatility and Expected Returns. *Journal of Finance*, 61(1), 259-299.
+- Newey, W. K., and West, K. D. (1987). A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix. *Econometrica*, 55(3), 703-708.
+- Frisch, R., and Waugh, F. V. (1933). Partial Time Regressions as Compared with Individual Trends. *Econometrica*, 1(4), 387-401.
+- Lovell, M. C. (1963). Seasonal Adjustment of Economic Time Series and Multiple Regression Analysis. *Journal of the American Statistical Association*, 58(304), 993-1010.
