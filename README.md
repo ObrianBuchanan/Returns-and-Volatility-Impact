@@ -49,7 +49,7 @@ $$
 \Delta \mathrm{VIX}_t = \gamma_0 + \gamma_1 r^m_t + u_t, \qquad v_t = \hat u_t
 $$
 
-By construction $\operatorname{corr}(v_t, r^m_t) = 0$. The slope measures the leverage effect: a 1% SPX drop comes with about +1.3 VIX points, or about +4.6% in VIX ($R^2$ of 0.67 and 0.55).
+By construction $\mathrm{corr}(v_t, r^m_t) = 0$. The slope measures the leverage effect: a 1% SPX drop comes with about +1.3 VIX points, or about +4.6% in VIX ($R^2$ of 0.67 and 0.55).
 
 **3. Stock exposures.** For each stock, with Newey-West (HAC, 5 lags) standard errors:
 
